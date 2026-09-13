@@ -1,19 +1,19 @@
 import os
 from telethon import TelegramClient, events
 
-api_id = int(os.environ.get("API_ID"))
-api_hash = os.environ.get("API_HASH")
-source_chat = os.environ.get("SOURCE_CHAT")
-destination_chat = os.environ.get("DESTINATION_CHAT")
-old_link = os.environ.get("OLD_LINK", "")
-new_link = os.environ.get("NEW_LINK", "")
+api_id = int(os.getenv('API_ID'))
+api_hash = os.getenv('API_HASH')
+bot_token = os.getenv('BOT_TOKEN')
+source_chat = os.getenv('SOURCE_CHAT')
+destination_chat = os.getenv('DESTINATION_CHAT')
+old_link = os.getenv('OLD_LINK')
+new_link = os.getenv('NEW_LINK')
 
-client = TelegramClient('cloud_session', api_id, api_hash)
+client = TelegramClient('bot_session', api_id, api_hash).start(bot_token=bot_token)
 
 @client.on(events.NewMessage(chats=source_chat))
 async def handler(event):
     text = event.raw_text or ""
-    
     if old_link and new_link:
         text = text.replace(old_link, new_link)
     
@@ -22,5 +22,5 @@ async def handler(event):
     else:
         await client.send_message(destination_chat, text)
 
-client.start()
+print("Bot started successfully...")
 client.run_until_disconnected()
