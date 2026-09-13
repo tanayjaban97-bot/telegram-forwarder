@@ -1,6 +1,23 @@
 import os
+import threading
+from flask import Flask
 from telethon import TelegramClient, events
 
+# Render Web Service port bind karne ke liye Flask App
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Telegram Forwarder is Active!"
+
+def run_flask():
+    port = int(os.getenv('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
+
+# Background thread me Flask start hoga
+threading.Thread(target=run_flask, daemon=True).start()
+
+# Telegram Bot Config
 api_id = int(os.getenv('API_ID'))
 api_hash = os.getenv('API_HASH')
 bot_token = os.getenv('BOT_TOKEN')
