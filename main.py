@@ -26,7 +26,7 @@ def self_ping():
     import time
     render_url = os.environ.get("RENDER_EXTERNAL_URL", "")
     while True:
-        time.sleep(120)  # Ping every 2 minutes for zero sleep risk
+        time.sleep(120)  # Ping every 2 minutes
         if render_url:
             try:
                 urllib.request.urlopen(render_url, timeout=10)
@@ -45,16 +45,16 @@ SOURCE_CHAT = "@sixclubofficialchanel"
 DESTINATION_CHAT = "@SixClubWinningZone"
 
 MY_NEW_LINK = "https://www.o0zd1g.com/#/register?invitationCode=645536043193"
-CUSTOM_FOOTER = "\n\n📌 **Join Official Channel:** @SixClubWinningZone"
 
 client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 
 def process_text(text):
     if not text:
         return ""
+    # External Site Links Replacement
     text = re.sub(r'https?://[^\s]+', MY_NEW_LINK, text)
+    # Telegram Links Replacement
     text = re.sub(r't\.me/[^\s]+', DESTINATION_CHAT, text)
-    text += CUSTOM_FOOTER
     return text
 
 @client.on(events.NewMessage(chats=SOURCE_CHAT))
