@@ -40,8 +40,8 @@ API_ID = int(os.environ.get("API_ID", 0))
 API_HASH = os.environ.get("API_HASH", "")
 STRING_SESSION = os.environ.get("STRING_SESSION", "")
 
-# Source & Destination Channels
-SOURCE_CHAT = "@BIGSMALLMASTER"  
+# Exact Username set from Screenshot
+SOURCE_CHAT = "@Bigsmallmaster11"  
 DESTINATION_CHAT = "@SixClubWinningZone"
 
 MY_NEW_LINK = "https://www.o0zd1g.com/#/register?invitationCode=645536043193"
@@ -51,9 +51,9 @@ client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 def process_text(text):
     if not text:
         return ""
-    # Website links replace
+    # Replace links with your referral link
     text = re.sub(r'https?://[^\s]+', MY_NEW_LINK, text)
-    # Telegram channel links replace
+    # Replace channel handles with your channel username
     text = re.sub(r't\.me/[^\s]+', DESTINATION_CHAT, text)
     return text
 
@@ -66,7 +66,7 @@ async def handler(event):
         if event.grouped_id:
             if event.grouped_id not in album_cache:
                 album_cache[event.grouped_id] = True
-                await asyncio.sleep(2)  # Wait for full album arrival
+                await asyncio.sleep(2.5)  # Wait for all images in album to load
                 
                 messages = await client.get_messages(SOURCE_CHAT, limit=10)
                 group = [m for m in messages if m.grouped_id == event.grouped_id]
