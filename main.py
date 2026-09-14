@@ -1,23 +1,39 @@
 import os
 import re
 import asyncio
+import urllib.request
 from flask import Flask
 from threading import Thread
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
-# --- FLASK KEEP ALIVE ---
+# --- FLASK KEEP-ALIVE SERVER ---
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Master Bot is running 24/7!"
+    return "Forwarder Bot is Active 24/7!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 
 Thread(target=run_flask, daemon=True).start()
+
+# --- SELF-PING SYSTEM (Prevents Render Sleep) ---
+def self_ping():
+    import time
+    render_url = os.environ.get("RENDER_EXTERNAL_URL", "")
+    while True:
+        time.sleep(300)  # Ping every 5 minutes
+        if render_url:
+            try:
+                urllib.request.urlopen(render_url)
+                print("Keep-Alive Ping Sent!")
+            except Exception as e:
+                print(f"Ping Error: {e}")
+
+Thread(target=self_ping, daemon=True).start()
 
 # --- TELEGRAM CONFIGURATION ---
 API_ID = int(os.environ.get("API_ID", 0))
@@ -27,7 +43,6 @@ STRING_SESSION = os.environ.get("STRING_SESSION", "")
 SOURCE_CHAT = "@sixclubofficialchanel"
 DESTINATION_CHAT = "@SixClubWinningZone"
 
-# Settings
 MY_NEW_LINK = "https://www.o0zd1g.com/#/register?invitationCode=645536043193"
 CUSTOM_FOOTER = "\n\n📌 **Join Official Channel:** @SixClubWinningZone"
 
@@ -36,16 +51,12 @@ client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 def process_text(text):
     if not text:
         return ""
-
-    # 1. Replace all external website links
+    # External Site Links Replacement
     text = re.sub(r'https?://[^\s]+', MY_NEW_LINK, text)
-    
-    # 2. Replace Telegram channel links
+    # Telegram Links Replacement
     text = re.sub(r't\.me/[^\s]+', DESTINATION_CHAT, text)
-
-    # 3. Add Custom Footer
+    # Footer Append
     text += CUSTOM_FOOTER
-
     return text
 
 @client.on(events.NewMessage(chats=SOURCE_CHAT))
@@ -53,7 +64,7 @@ async def handler(event):
     try:
         updated_text = process_text(event.raw_text)
 
-        # Handle Albums / Grouped Photos
+        # Handle Albums / Multiple Photos
         if event.grouped_id:
             try:
                 await client.send_file(
@@ -62,7 +73,7 @@ async def handler(event):
                     caption=updated_text
                 )
             except Exception as e:
-                print(f"Grouped media error: {e}")
+                print(f"Album send error: {e}")
             return
 
         # Handle Single Media (Photos, Videos, GIFs)
@@ -70,7 +81,7 @@ async def handler(event):
             try:
                 await client.send_file(DESTINATION_CHAT, event.media, caption=updated_text)
             except Exception as media_err:
-                print(f"Media fail fallback to text: {media_err}")
+                print(f"Media error (Premium Fallback): {media_err}")
                 if updated_text:
                     await client.send_message(DESTINATION_CHAT, updated_text)
         else:
@@ -78,13 +89,18 @@ async def handler(event):
                 await client.send_message(DESTINATION_CHAT, updated_text)
 
     except Exception as e:
-        print(f"Master Handler Error: {e}")
+        print(f"Handler error: {e}")
 
 async def main():
-    print("Starting Master Telegram Forwarder Client...")
-    await client.start()
-    print("Master Client running successfully!")
-    await client.run_until_disconnected()
+    while True:
+        try:
+            print("Connecting client to Telegram...")
+            await client.start()
+            print("Bot fully operational and listening!")
+            await client.run_until_disconnected()
+        except Exception as err:
+            print(f"Disconnect detected: {err}. Auto-reconnecting in 5 seconds...")
+            await asyncio.sleep(5)
 
 if __name__ == "__main__":
     asyncio.run(main())
