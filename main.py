@@ -1,43 +1,68 @@
 import os
-import threading
+import re
+import asyncio
 from flask import Flask
+from threading import Thread
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
-# Render Web Service port bind karne ke liye Flask App
+# --- FLASK DUMMY SERVER (Keep Render Alive) ---
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Telegram Forwarder is Active!"
+    return "Bot is running 24/7!"
 
 def run_flask():
-    port = int(os.getenv('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
 
-threading.Thread(target=run_flask, daemon=True).start()
+# Start Flask server in background thread
+Thread(target=run_flask, daemon=True).start()
 
-# Telegram User Session Config
-api_id = int(os.getenv('API_ID'))
-api_hash = os.getenv('API_HASH')
-session_string = os.getenv('STRING_SESSION')
-source_chat = os.getenv('SOURCE_CHAT')
-destination_chat = os.getenv('DESTINATION_CHAT')
-old_link = os.getenv('OLD_LINK')
-new_link = os.getenv('NEW_LINK')
+# --- TELEGRAM CONFIGURATION ---
+API_ID = int(os.environ.get("API_ID", 0))
+API_HASH = os.environ.get("API_HASH", "")
+STRING_SESSION = os.environ.get("STRING_SESSION", "")
 
-client = TelegramClient(StringSession(session_string), api_id, api_hash).start()
+# Channels setup
+SOURCE_CHAT = "@sixclubofficialchanel"
+DESTINATION_CHAT = "@SixClubWinningZone"
 
-@client.on(events.NewMessage(chats=source_chat))
+client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
+
+@client.on(events.NewMessage(chats=SOURCE_CHAT))
 async def handler(event):
-    text = event.raw_text or ""
-    if old_link and new_link:
-        text = text.replace(old_link, new_link)
-    
-    if event.media:
-        await client.send_file(destination_chat, event.media, caption=text)
-    else:
-        await client.send_message(destination_chat, text)
+    try:
+        text = event.raw_text or ""
 
-print("User account bot started successfully...")
-client.run_until_disconnected()
+        # --- AUTO LINK REPLACEMENT LOGIC ---
+        # Replace any t.me links with your channel handle or custom link
+        if text:
+            text = re.sub(r'https?://t\.me/\S+', DESTINATION_CHAT, text)
+
+        # --- MEDIA HANDLING WITH PREMIUM FALLBACK ---
+        if event.media:
+            try:
+                # Try sending file with updated text
+                await client.send_file(DESTINATION_CHAT, event.media, caption=text)
+            except Exception as media_err:
+                print(f"Media Error (e.g., Premium Sticker/File): {media_err}")
+                # Fallback: Send text only if media fails due to Telegram Premium limits
+                if text:
+                    await client.send_message(DESTINATION_CHAT, text)
+        else:
+            if text:
+                await client.send_message(DESTINATION_CHAT, text)
+
+    except Exception as e:
+        print(f"General Handling Error: {e}")
+
+async def main():
+    print("Starting Telegram Forwarder Client...")
+    await client.start()
+    print("User account bot started successfully!")
+    await client.run_until_disconnected()
+
+if __name__ == "__main__":
+    asyncio.run(main())
