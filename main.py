@@ -6,12 +6,12 @@ from threading import Thread
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
-# --- FLASK DUMMY SERVER (Keep Render Alive) ---
+# --- FLASK KEEP ALIVE ---
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Bot is running 24/7!"
+    return "Master Bot is running 24/7!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -27,41 +27,63 @@ STRING_SESSION = os.environ.get("STRING_SESSION", "")
 SOURCE_CHAT = "@sixclubofficialchanel"
 DESTINATION_CHAT = "@SixClubWinningZone"
 
-# Aapka Naya Referral Link
+# Settings
 MY_NEW_LINK = "https://www.o0zd1g.com/#/register?invitationCode=645536043193"
+CUSTOM_FOOTER = "\n\n📌 **Join Official Channel:** @SixClubWinningZone"
 
 client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
+
+def process_text(text):
+    if not text:
+        return ""
+
+    # 1. Replace all external website links
+    text = re.sub(r'https?://[^\s]+', MY_NEW_LINK, text)
+    
+    # 2. Replace Telegram channel links
+    text = re.sub(r't\.me/[^\s]+', DESTINATION_CHAT, text)
+
+    # 3. Add Custom Footer
+    text += CUSTOM_FOOTER
+
+    return text
 
 @client.on(events.NewMessage(chats=SOURCE_CHAT))
 async def handler(event):
     try:
-        text = event.raw_text or ""
+        updated_text = process_text(event.raw_text)
 
-        # --- ADVANCED LINK REPLACEMENT LOGIC ---
-        if text:
-            # Matches any zgollb.com, o0zd1g.com, t.me, or generic http/https URLs
-            text = re.sub(r'https?://[^\s]+', MY_NEW_LINK, text)
-            text = re.sub(r't\.me/[^\s]+', DESTINATION_CHAT, text)
+        # Handle Albums / Grouped Photos
+        if event.grouped_id:
+            try:
+                await client.send_file(
+                    DESTINATION_CHAT, 
+                    event.message.media, 
+                    caption=updated_text
+                )
+            except Exception as e:
+                print(f"Grouped media error: {e}")
+            return
 
-        # --- MEDIA HANDLING WITH PREMIUM FALLBACK ---
+        # Handle Single Media (Photos, Videos, GIFs)
         if event.media:
             try:
-                await client.send_file(DESTINATION_CHAT, event.media, caption=text)
+                await client.send_file(DESTINATION_CHAT, event.media, caption=updated_text)
             except Exception as media_err:
-                print(f"Media Error (e.g., Premium Sticker/File): {media_err}")
-                if text:
-                    await client.send_message(DESTINATION_CHAT, text)
+                print(f"Media fail fallback to text: {media_err}")
+                if updated_text:
+                    await client.send_message(DESTINATION_CHAT, updated_text)
         else:
-            if text:
-                await client.send_message(DESTINATION_CHAT, text)
+            if updated_text:
+                await client.send_message(DESTINATION_CHAT, updated_text)
 
     except Exception as e:
-        print(f"General Error: {e}")
+        print(f"Master Handler Error: {e}")
 
 async def main():
-    print("Starting Telegram Forwarder Client...")
+    print("Starting Master Telegram Forwarder Client...")
     await client.start()
-    print("User account bot started successfully!")
+    print("Master Client running successfully!")
     await client.run_until_disconnected()
 
 if __name__ == "__main__":
