@@ -2,107 +2,108 @@ import os
 import re
 import asyncio
 from flask import Flask
-from threading import Thread
 from telethon import TelegramClient, events
-from telethon.errors import FloodWaitError
+from telethon.sessions import StringSession
 
-# Render Port Setup & Flask Keep-Alive
-app = Flask(__name__)
+# --- Flask Server for Render Keep-Alive ---
+app = Flask('')
 
 @app.route('/')
 def home():
-    return "Telegram Forwarder Bot is Running 24/7!"
+    return "Bot status: FULLY ACTIVE 24/7 & Listening for messages..."
 
 def run_flask():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host='0.0.0.0', port=10000)
 
-# Read Environment Variables
-API_ID = int(os.environ.get("API_ID"))
-API_HASH = os.environ.get("API_HASH")
-STRING_SESSION = os.environ.get("STRING_SESSION")
+# --- Telegram Credentials & Configuration ---
+API_ID = int(os.environ.get("API_ID", 30611492))
+API_HASH = os.environ.get("API_HASH", "b3171b81902e76cbbcd7f1d7e8470b88")
+STRING_SESSION = os.environ.get("STRING_SESSION", "")
 
-def parse_env_list(env_var_name):
-    val = os.environ.get(env_var_name, "")
-    return [item.strip() for item in val.split(",") if item.strip()]
+# Destination channel where messages will be forwarded
+DESTINATION_CHANNEL = "headagentrr"
 
-SOURCE_CHATS = parse_env_list("SOURCE_CHAT")
-DEST_CHATS = parse_env_list("DESTINATION_CHAT")
-OLD_LINKS = parse_env_list("OLD_LINK")
-NEW_LINKS = parse_env_list("NEW_LINK")
+# Source channels list
+SOURCE_CHANNELS = [
+    "bigsmallmaster11",
+    "MaanVip_bitcoin"
+]
 
-# Map Source to Destination & Links
-MAPPING = {}
-for i in range(len(SOURCE_CHATS)):
-    src = SOURCE_CHATS[i].lower()
-    dest = DEST_CHATS[i] if i < len(DEST_CHATS) else None
-    old_l = OLD_LINKS[i] if i < len(OLD_LINKS) else ""
-    new_l = NEW_LINKS[i] if i < len(NEW_LINKS) else ""
-    
-    if dest:
-        MAPPING[src] = {
-            "dest": dest,
-            "old_link": old_l,
-            "new_link": new_l
-        }
+# Your Affiliate Link for replacement
+AFFILIATE_LINK = "https://maanwin.ai/register?inviteCode=9HJ2BXN&from=web"
 
-from telethon.sessions import StringSession
 client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 
-@client.on(events.NewMessage)
-async def message_handler(event):
+def replace_links_in_text(text):
+    if not text:
+        return text
+    # Regex to find standard http/https links, www links, or t.me links
+    url_pattern = re.compile(r'https?://[^\s]+|t\.me/[^\s]+|www\.[^\s]+', re.IGNORECASE)
+    return url_pattern.sub(AFFILIATE_LINK, text)
+
+# Cache to prevent duplicate processing of media albums
+processed_albums = set()
+
+@client.on(events.NewMessage(chats=SOURCE_CHANNELS))
+async def handler(event):
     try:
-        chat = await event.get_chat()
-        chat_username = getattr(chat, 'username', None)
-        
-        # Check matching channel
-        matched_src = None
-        if chat_username:
-            formatted_username = f"@{chat_username.lower()}"
-            for src in MAPPING.keys():
-                if src.lower() == formatted_username:
-                    matched_src = src
-                    break
-        
-        if not matched_src:
+        # 1. Skip if message contains any APK file
+        if event.file and event.file.name:
+            if event.file.name.lower().endswith('.apk'):
+                print("[SKIPPED] APK file detected and blocked.")
+                return
+
+        # 2. Handle Media Groups / Albums (Multiple photos together)
+        if event.grouped_id:
+            if event.grouped_id in processed_albums:
+                return
+            
+            processed_albums.add(event.grouped_id)
+            asyncio.get_event_loop().call_later(45, processed_albums.discard, event.grouped_id)
+
+            # Short wait to let all parts of the album arrive
+            await asyncio.sleep(1.5)
+            
+            messages = await client.get_messages(event.chat_id, limit=10)
+            group_msgs = [msg for msg in messages if msg.grouped_id == event.grouped_id]
+
+            media_files = []
+            album_caption = ""
+
+            for msg in group_msgs:
+                if msg.file and msg.file.name and msg.file.name.lower().endswith('.apk'):
+                    continue
+                if msg.media:
+                    media_files.append(msg.media)
+                if msg.raw_text and not album_caption:
+                    album_caption = replace_links_in_text(msg.raw_text)
+
+            if media_files:
+                media_files.reverse() # Maintain original order
+                await client.send_file(DESTINATION_CHANNEL, media_files, caption=album_caption)
+                print(f"[SUCCESS] Album forwarded to {DESTINATION_CHANNEL}")
             return
 
-        config = MAPPING[matched_src]
-        target_dest = config["dest"]
-        old_link = config["old_link"]
-        new_link = config["new_link"]
+        # 3. Single Message Handling (Text or Media)
+        message_text = event.raw_text
+        modified_text = replace_links_in_text(message_text)
 
-        text = event.message.message or ""
-        
-        # Link Replacement
-        if old_link and new_link and old_link in text:
-            text = text.replace(old_link, new_link)
+        if event.media:
+            await client.send_file(DESTINATION_CHANNEL, event.media, caption=modified_text)
+        elif modified_text:
+            await client.send_message(DESTINATION_CHANNEL, modified_text)
 
-        # Forwarding Logic
-        if event.message.media:
-            await client.send_message(target_dest, text, file=event.message.media)
-        elif text:
-            await client.send_message(target_dest, text)
-            
-        print(f"[SUCCESS] Message forwarded from {matched_src} to {target_dest}")
+        print(f"[SUCCESS] Message forwarded to {DESTINATION_CHANNEL}")
 
-    except FloodWaitError as e:
-        print(f"[FLOOD WAIT] Sleeping for {e.seconds} seconds...")
-        await asyncio.sleep(e.seconds)
     except Exception as e:
         print(f"[ERROR] {e}")
 
-async def main():
-    print("Starting Telegram Client...")
-    await client.start()
-    print("Bot status: FULLY ACTIVE 24/7 & Listening for messages...")
-    await client.run_until_disconnected()
-
 if __name__ == "__main__":
-    # Start Flask Web Server Thread
-    flask_thread = Thread(target=run_flask)
-    flask_thread.daemon = True
+    import threading
+    flask_thread = threading.Thread(target=run_flask)
     flask_thread.start()
-    
-    # Run Telethon Loop
-    asyncio.run(main())
+
+    print("Starting Telegram Client...")
+    client.start()
+    print("Bot is running and listening for messages...")
+    client.run_until_disconnected()
