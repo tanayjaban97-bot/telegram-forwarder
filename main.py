@@ -6,22 +6,21 @@ from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
 # --- Flask Server for Render Keep-Alive ---
-app = Flask('')
+app = Flask(__name__)
 
 @app.route('/')
 def home():
     return "Bot status: FULLY ACTIVE 24/7 & Listening for messages..."
 
 def run_flask():
-    app.run(host='0.0.0.0', port=10000)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
 
 # --- Telegram Credentials ---
 API_ID = int(os.environ.get("API_ID", 30611492))
 API_HASH = os.environ.get("API_HASH", "b3171b81902e76cbbcd7f1d7e8470b88")
 STRING_SESSION = os.environ.get("STRING_SESSION", "")
 
-# --- Mapping Configuration ---
-# Source Channel Username (lowercase) -> (Destination Channel, Unique Affiliate Link)
 CHANNEL_MAPPING = {
     "bigsmallmaster11": {
         "destination": "SixClubWinningZone",
@@ -44,7 +43,6 @@ client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 def replace_links_in_text(text, replacement_link):
     if not text:
         return text
-    # Regex to find standard URLs, t.me links, or www links
     url_pattern = re.compile(r'https?://[^\s]+|t\.me/[^\s]+|www\.[^\s]+', re.IGNORECASE)
     return url_pattern.sub(replacement_link, text)
 
@@ -53,12 +51,10 @@ processed_albums = set()
 @client.on(events.NewMessage(chats=SOURCE_CHANNELS))
 async def handler(event):
     try:
-        # Determine source chat username
         chat = await event.get_chat()
         chat_username = getattr(chat, 'username', '').lower() if getattr(chat, 'username', None) else ""
 
         if not chat_username or chat_username not in CHANNEL_MAPPING:
-            # Fallback check if username matches any key
             for key in CHANNEL_MAPPING:
                 if key in str(event.chat_id) or (getattr(chat, 'username', '') and key == chat.username.lower()):
                     chat_username = key
@@ -71,13 +67,10 @@ async def handler(event):
         dest_channel = config["destination"]
         affiliate_link = config["affiliate_link"]
 
-        # 1. Skip if message contains any APK file
-        if event.file and event.file.name:
-            if event.file.name.lower().endswith('.apk'):
-                print(f"[SKIPPED] APK file detected from {chat_username}.")
-                return
+        if event.file and event.file.name and event.file.name.lower().endswith('.apk'):
+            print(f"[SKIPPED] APK file detected from {chat_username}.")
+            return
 
-        # 2. Handle Media Groups / Albums
         if event.grouped_id:
             if event.grouped_id in processed_albums:
                 return
@@ -107,7 +100,6 @@ async def handler(event):
                 print(f"[SUCCESS] Album forwarded from {chat_username} -> {dest_channel}")
             return
 
-        # 3. Single Message Handling
         message_text = event.raw_text
         modified_text = replace_links_in_text(message_text, affiliate_link)
 
